@@ -93,7 +93,7 @@ public class ListUserObjectsCommand extends AbstractCommand implements Interrupt
                     columnDef = TABLE_DISP_COLS;
                 }
 
-                renderer = new ResultSetRenderer(rset, "|", true, true, 10000, HenPlus.out(), columnDef);
+                renderer = new ResultSetRenderer(rset, "|", true, true, false, 10000, HenPlus.out(), columnDef);
                 renderer.getDisplayMetaData()[2].setAutoWrap(78);
 
                 final int tables = renderer.execute();

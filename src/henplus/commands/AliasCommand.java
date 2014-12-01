@@ -12,6 +12,7 @@ import henplus.SQLSession;
 import henplus.io.ConfigurationContainer;
 import henplus.view.Column;
 import henplus.view.ColumnMetaData;
+import henplus.view.ITableRenderer;
 import henplus.view.TableRenderer;
 import henplus.view.util.SortedMatchIterator;
 
@@ -159,7 +160,7 @@ public final class AliasCommand extends AbstractCommand {
     private void showAliases() {
         DRV_META[0].resetWidth();
         DRV_META[1].resetWidth();
-        final TableRenderer table = new TableRenderer(DRV_META, HenPlus.out());
+        final ITableRenderer table = new TableRenderer(DRV_META, HenPlus.out());
         for(Map.Entry<String,String> entry : _aliases.entrySet()) {
             final Column[] row = new Column[2];
             row[0] = new Column(entry.getKey());
