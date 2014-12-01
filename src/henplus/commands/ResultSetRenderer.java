@@ -33,6 +33,8 @@ public class ResultSetRenderer implements Interruptable {
     private final int _rowLimit;
     private volatile boolean _running;
 
+    private ResultSetFilter _filter = null;
+
     public ResultSetRenderer(final ResultSet rset, final String columnDelimiter, final boolean enableHeader,
             final boolean enableFooter, final boolean enableVertical, final int limit, final OutputDevice out, final int[] show) throws SQLException {
         _rset = rset;
@@ -52,6 +54,10 @@ public class ResultSetRenderer implements Interruptable {
     public ResultSetRenderer(final ResultSet rset, final String columnDelimiter, final boolean enableHeader,
             final boolean enableFooter, final boolean enableVertical, final int limit, final OutputDevice out) throws SQLException {
         this(rset, columnDelimiter, enableHeader, enableFooter, enableVertical, limit, out, null);
+    }
+
+    public void setFilter(ResultSetFilter filter) {
+        _filter = filter;
     }
 
     // Interruptable interface.
@@ -94,6 +100,7 @@ public class ResultSetRenderer implements Interruptable {
         _running = true;
         try {
             while (_running && _rset.next()) {
+                final String[] columnValues = new String[_columns];
                 final Column[] currentRow = new Column[_columns];
                 for (int i = 0; i < _columns; ++i) {
                     final int col = _showColumns != null ? _showColumns[i] : i + 1;
@@ -112,16 +119,22 @@ public class ResultSetRenderer implements Interruptable {
                     }
                     final Column thisCol = new Column(colString);
                     currentRow[i] = thisCol;
+                    if (_filter != null) {
+                        columnValues[i] = colString;
+                    }
                 }
                 if (_firstRowTime < 0) {
                     // read first row completely.
                     _firstRowTime = System.currentTimeMillis();
                 }
-                _table.addRow(currentRow);
-                ++rows;
-                if (rows >= _rowLimit) {
-                    _beyondLimit = true;
-                    break;
+
+                if (_filter == null || _filter.accept(columnValues)) {
+                    _table.addRow(currentRow);
+                    ++rows;
+                    if (rows >= _rowLimit) {
+                        _beyondLimit = true;
+                        break;
+                    }
                 }
             }
 
@@ -173,6 +186,13 @@ public class ResultSetRenderer implements Interruptable {
             result[i] = new ColumnMetaData(columnLabel, alignment);
         }
         return result;
+    }
+
+    public static interface ResultSetFilter {
+
+        // return false to filter/remove row
+        // return true to keep row.
+        public boolean accept(String[] row);
     }
 }
 
