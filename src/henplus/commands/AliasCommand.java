@@ -149,10 +149,24 @@ public final class AliasCommand extends AbstractCommand {
                 _currentExecutedAliases.clear();
                 return EXEC_FAILED;
             }
-            HenPlus.msg().println("execute alias: " + toExecute + param);
-            _currentExecutedAliases.add(cmd);
-            _dispatcher.execute(currentSession, toExecute + param);
-            _currentExecutedAliases.clear();
+
+            if (toExecute.matches(".*[$]\\{[0-9]+\\}.*")) {
+                String toExecuteWithParams = toExecute;
+                // This is kind of cheap and dirty
+                for (int idx = 0; st.hasMoreTokens(); idx++) {
+                    toExecuteWithParams = toExecuteWithParams.replace("${" + idx + "}", st.nextToken());
+                }
+
+                HenPlus.msg().println("execute alias: " + toExecuteWithParams);
+                _currentExecutedAliases.add(cmd);
+                _dispatcher.execute(currentSession, toExecuteWithParams);
+                _currentExecutedAliases.clear();
+            } else {
+                HenPlus.msg().println("execute alias: " + toExecute + param);
+                _currentExecutedAliases.add(cmd);
+                _dispatcher.execute(currentSession, toExecute + param);
+                _currentExecutedAliases.clear();
+            }
         }
         return SUCCESS;
     }
