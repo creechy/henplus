@@ -19,7 +19,7 @@
 
      <!-- libs -->
      <property name="commons-cli" value="commons-cli-1.2.jar"/>
-     <property name="libreadline-java" value="libreadline-java-0.8.0.jar"/>
+     <property name="libreadline-java" value="libreadline-java-0.8.1.jar"/>
 
      <path id="compile.classpath">
         <fileset dir="${lib}">
