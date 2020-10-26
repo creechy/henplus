@@ -584,7 +584,7 @@ public final class HenPlus implements Interruptable {
             }
 
             endpos = pos + 1;
-            while (endpos < in.length() && Character.isJavaIdentifierPart(in.charAt(endpos))) {
+            while (endpos < in.length() && (Character.isJavaIdentifierPart(in.charAt(endpos)) || in.charAt(endpos) == '.')) {
                 endpos++;
             }
             varname = in.substring(pos + 1, endpos);
