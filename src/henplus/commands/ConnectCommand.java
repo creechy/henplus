@@ -25,10 +25,14 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.SortedMap;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -47,6 +51,7 @@ public class ConnectCommand extends AbstractCommand {
     private final ConfigurationContainer _config;
     private final SessionManager _sessionManager;
     private final SortedMap<String,String> _knownUrls;
+    private final Map<String,List<String>> _knownProps;
     private final HenPlus _henplus;
 
     static {
@@ -76,6 +81,7 @@ public class ConnectCommand extends AbstractCommand {
         _henplus = henplus;
         _sessionManager = sessionManager;
         _knownUrls = new TreeMap<String,String>();
+        _knownProps = new HashMap<>();
         _config = henplus.createConfigurationContainer(CONNECTION_CONFIG);
         _config.read(new ConfigurationContainer.ReadAction() {
 
@@ -90,17 +96,22 @@ public class ConnectCommand extends AbstractCommand {
                     final StringTokenizer tok = new StringTokenizer(urlLine);
                     String url;
                     String alias;
+                    List<String> props = new ArrayList<>();
                     final int tokNum = tok.countTokens();
                     if (tokNum == 1) {
                         url = tok.nextToken();
                         alias = url;
-                    } else if (tokNum == 2) {
+                    } else if (tokNum > 1) {
                         url = tok.nextToken();
                         alias = tok.nextToken();
+                        while (tok.hasMoreTokens()) {
+                            props.add(tok.nextToken());
+                        }
                     } else {
                         continue;
                     }
                     _knownUrls.put(alias, url);
+                    _knownProps.put(alias, props);
                 }
             }
         });
@@ -111,6 +122,7 @@ public class ConnectCommand extends AbstractCommand {
         String url = null;
         String password = null;
         String username = null;
+        Properties props = new Properties();
         final String[] argv = line.getArgs();
         if (argv.length > 0) {
 
@@ -128,9 +140,16 @@ public class ConnectCommand extends AbstractCommand {
         if (line.hasOption("J")) {
             url = line.getOptionValue("J");
         }
+        if (line.hasOption("N")) {
+            String[] propArgs = line.getOptionValues("N");
+            for (String prop : propArgs) {
+                String[] values = prop.split("=", 2);
+                props.setProperty(values[0], values[1]);
+            }
+        }
         if (url != null) {
             try {
-                connect(url, username, password);
+                connect(url, username, password, props);
             } catch (final Exception e) {
                 // e.printStackTrace();
                 HenPlus.msg().println(e.getMessage());
@@ -147,10 +166,10 @@ public class ConnectCommand extends AbstractCommand {
      * @throws SQLException
      * @throws IOException
      */
-    private void connect(final String url, final String username, final String password) throws ClassNotFoundException,
+    private void connect(final String url, final String username, final String password, Properties props) throws ClassNotFoundException,
             SQLException, IOException {
         SQLSession session;
-        session = new SQLSession(url, username, password);
+        session = new SQLSession(url, username, password, props);
         _currentSessionName = createSessionName(session, null);
         _sessionManager.addSession(_currentSessionName, session);
         _knownUrls.put(url, url);
@@ -251,12 +270,20 @@ public class ConnectCommand extends AbstractCommand {
                 for (Map.Entry<String,String> entry : _knownUrls.entrySet()) {
                     final String alias = entry.getKey();
                     final String url = entry.getValue();
+                    final List<String> propsList = _knownProps.get(alias);
                     if (alias.equals(url)) {
                         writer.println(url);
                     } else {
                         writer.print(url);
                         writer.print(" ");
-                        writer.println(alias);
+                        writer.print(alias);
+                        if (propsList != null && !propsList.isEmpty()) {
+                            propsList.forEach(p -> {
+                                writer.print(" ");
+                                writer.print(p);
+                            });
+                        }
+
                     }
                 }
                 writer.close();
@@ -314,11 +341,22 @@ public class ConnectCommand extends AbstractCommand {
             showSessions();
             return SUCCESS;
         } else if ("connect".equals(cmd)) {
-            if (argc < 1 || argc > 2) {
+            if (argc < 1) {
                 return SYNTAX_ERROR;
             }
             String url = (String) st.nextElement();
-            String alias = argc == 2 ? st.nextToken() : null;
+            String alias = null;
+            List<String> props = new ArrayList<>();
+            
+            while (st.hasMoreTokens()) {
+                String arg = st.nextToken();
+                if (arg.contains("=")) {
+                    props.add(arg);
+                } else {
+                    alias = arg;
+                }
+            }
+
             if (alias == null) {
                 /*
                  * we only got one parameter. So the that single parameter might
@@ -329,14 +367,21 @@ public class ConnectCommand extends AbstractCommand {
                     url = _knownUrls.get(url);
                     if (!possibleAlias.equals(url)) {
                         alias = possibleAlias;
+                        props = _knownProps.get(alias);
                     }
                 }
             }
             try {
-                session = new SQLSession(url, null, null);
+                Properties properties = new Properties();
+                props.forEach(p -> {
+                    String[] values = p.split("=", 2);
+                    properties.setProperty(values[0], values[1]);
+                });
+                session = new SQLSession(url, null, null, properties);
                 _knownUrls.put(url, url);
                 if (alias != null) {
                     _knownUrls.put(alias, url);
+                    _knownProps.put(alias, props);
                 }
                 _currentSessionName = createSessionName(session, alias);
                 _sessionManager.addSession(_currentSessionName, session);
@@ -451,7 +496,7 @@ public class ConnectCommand extends AbstractCommand {
     @Override
     public String getSynopsis(final String cmd) {
         if ("connect".equals(cmd)) {
-            return cmd + " <jdbc-url> [session-name]";
+            return cmd + " <jdbc-url> [session-name] [prop=val .. prop=val]";
         } else if ("switch".equals(cmd)) {
             return cmd + " <session-name>";
         } else if ("rename-session".equals(cmd)) {
@@ -464,7 +509,9 @@ public class ConnectCommand extends AbstractCommand {
     public String getLongDescription(final String cmd) {
         String dsc = null;
         if ("connect".equals(cmd)) {
-            dsc = "\tconnects to the url with the optional session name.\n"
+            dsc = "\tconnects to the url with the optional session name and properties.\n"
+                    + "\tArguments with an equal sign are considered properties\n"
+                    + "\tAny other argument will be used as the session name.\n"
                     + "\tIf no session name is given, a session name is chosen.\n"
                     + "\tIf a session name is given, this is stored as an alias\n"
                     + "\tfor the URL as well, so later you might connect with\n" + "\tthat alias conveniently instead:\n"

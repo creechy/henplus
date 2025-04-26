@@ -34,6 +34,7 @@ public class SQLSession implements Interruptable {
     private final String _url;
     private String _username;
     private String _password;
+    private Properties _props;
     private final String _databaseInfo;
     private Connection _conn;
     private SQLMetaData _metaData;
@@ -44,13 +45,15 @@ public class SQLSession implements Interruptable {
     /**
      * creates a new SQL session. Open the database connection, initializes the readline library
      */
-    public SQLSession(final String url, final String user, final String password) throws IllegalArgumentException,
+    public SQLSession(final String url, final String user, final String password, final Properties props) throws IllegalArgumentException,
             ClassNotFoundException, SQLException, IOException {
         _statementCount = 0;
         _conn = null;
         _url = url;
         _username = user;
         _password = password;
+        _props = new Properties();
+        props.forEach((k,v) -> _props.setProperty(k.toString(), v.toString()));
         _propertyRegistry = new PropertyRegistry();
 
         Driver driver = null;
@@ -60,6 +63,7 @@ public class SQLSession implements Interruptable {
         HenPlus.msg().println("HenPlus II connecting ");
         HenPlus.msg().println(" url '" + url + '\'');
         HenPlus.msg().println(" driver version " + driver.getMajorVersion() + "." + driver.getMinorVersion());
+        HenPlus.msg().println(" properties " + _props.toString());
         connect();
 
         int currentIsolation = Connection.TRANSACTION_NONE;
@@ -160,7 +164,6 @@ public class SQLSession implements Interruptable {
             _conn = null;
         }
 
-        final Properties props = new Properties();
         /*
          * FIXME make generic plugin for specific database drivers that handle
          * the specific stuff. For now this is a quick hack.
@@ -170,7 +173,7 @@ public class SQLSession implements Interruptable {
              * this is needed to make comment in oracle show up in the remarks
              * http://forums.oracle.com/forums/thread.jsp?forum=99&thread=225790
              */
-            props.setProperty("remarksReporting", "true");
+            _props.setProperty("remarksReporting", "true");
         }
 
         /*
@@ -179,7 +182,7 @@ public class SQLSession implements Interruptable {
          */
         if (_username == null || _password == null) {
             try {
-                _conn = DriverManager.getConnection(_url, props);
+                _conn = DriverManager.getConnection(_url, _props);
             } catch (final SQLException e) {
                 HenPlus.msg().println(e.getMessage());
                 // only query terminals.
@@ -190,7 +193,11 @@ public class SQLSession implements Interruptable {
         }
 
         if (_conn == null) {
-            _conn = DriverManager.getConnection(_url, _username, _password);
+            Properties props = new Properties();
+            _props.forEach((k,v) -> props.setProperty(k.toString(), v.toString()));
+            props.setProperty("user", _username);
+            props.setProperty("password", _password);
+            _conn = DriverManager.getConnection(_url, props);
         }
 
         if (_conn != null && _username == null) {
